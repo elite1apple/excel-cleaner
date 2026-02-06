@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Cleaner - Window Shade Automation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">🪟 Excel Cleaner</h1>
+            <p class="subtitle">Transform raw window shade data into clean, standardized Excel files</p>
+        </header>
+
+        <main class="main-content">
+            <!-- Upload Section -->
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <h2>Drop your Excel file here</h2>
+                    <p>or click to browse</p>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                    <div class="file-info" id="fileInfo"></div>
+                </div>
+
+                <!-- Optional Configuration (Collapsed by Default) -->
+                <div class="config-section">
+                    <button class="config-toggle" id="configToggle">
+                        <span>⚙️ Advanced Options (Optional)</span>
+                        <span class="toggle-icon">▼</span>
+                    </button>
+                    
+                    <div class="config-content" id="configContent">
+                        <p class="config-help">
+                            ℹ️ The script auto-detects color codes from your Excel file. 
+                            Use these fields only to <strong>override</strong> or add missing values.
+                        </p>
+                        
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="bedColor">Bed Color Code</label>
+                                <input type="text" id="bedColor" placeholder="e.g., YUNOWH (optional)">
+                                <span class="help-text">Override auto-detected Bed color</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="livColor">Liv Color Code</label>
+                                <input type="text" id="livColor" placeholder="e.g., PWS3WHIT (optional)">
+                                <span class="help-text">Override auto-detected Liv color</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="deductionCell">Deduction Cell</label>
+                                <input type="text" id="deductionCell" placeholder="I6" value="I6">
+                                <span class="help-text">Cell reference for D value (default: I6)</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="fabricColors">Additional Fabric Colors (JSON)</label>
+                            <textarea id="fabricColors" rows="3" placeholder='{"Kitchen": "COLOR123", "Studio": "COLOR456"}'></textarea>
+                            <span class="help-text">For unrecognized fabrics - format: {"FabricName": "ColorCode"}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn-primary" id="uploadBtn" disabled>
+                    <span class="btn-text">Upload & Clean</span>
+                    <span class="btn-loader" id="loader"></span>
+                </button>
+            </div>
+
+            <!-- Processing Status -->
+            <div class="status-section" id="statusSection" style="display: none;">
+                <div class="status-animation">
+                    <div class="spinner"></div>
+                </div>
+                <h2>Processing your file...</h2>
+                <p>This will take just a moment</p>
+            </div>
+
+            <!-- Success Section -->
+            <div class="success-section" id="successSection" style="display: none;">
+                <div class="success-icon">✅</div>
+                <h2>File cleaned successfully!</h2>
+                <p id="successMessage"></p>
+                <div class="button-group">
+                    <button class="btn-success" id="downloadBtn">
+                        📥 Download Cleaned File
+                    </button>
+                    <button class="btn-secondary" id="resetBtn">
+                        🔄 Clean Another File
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error Section -->
+            <div class="error-section" id="errorSection" style="display: none;">
+                <div class="error-icon">❌</div>
+                <h2>Oops! Something went wrong</h2>
+                <p id="errorMessage"></p>
+                <button class="btn-secondary" id="errorResetBtn">
+                    🔄 Try Again
+                </button>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>💡 Tip: The script automatically detects color codes from your Excel file headers</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

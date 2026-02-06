@@ -1,0 +1,68 @@
+================================================================================
+RAW FILE HEADER REFERENCE - Quick Guide
+================================================================================
+
+Expected column headers in raw Excel files (must be at row 9, 0-indexed: row 8)
+
+REQUIRED COLUMNS:
+-----------------
+1. Tag              - Room/tag number (can be NaN for continuation rows)
+2. Width            - Window width (numeric)
+3. Height           - Window height (numeric)
+4. Fabric           - "Bed" or "Liv"
+5. Control          - "L" (Left) or "R" (Right)
+
+OPTIONAL BUT IMPORTANT COLUMNS:
+-------------------------------
+6. Drawing Ref.     - Drawing reference (usually empty)
+7. Q                - Quantity (usually 1)
+8. Product          - Product type (e.g., "Manual Shade")
+9. Roll             - "Rev" for reverse roll (affects ReverseRoll output)
+10. Chain           - Chain length value (affects ControlLength output)
+                      NOTE: Has trailing space in column name: "Chain "
+11. Mount           - Mount type (usually empty)
+12. Deducts         - Deduction code with optional value:
+                      Format: "Dl=1/2", "Dr=1/2", "D=1/2", or just "Dl", "Dr", "D"
+                      Examples: "Dl=1/2", "Dr-1/2", "D=1/2", "D=1", "Dl", "Dr", "D"
+                      NOTE: Has trailing space in column name: "Deducts "
+                      
+                      When D=1/2 is specified (per-side value):
+                      - Dl = 1/2 (left side, stores 0.5)
+                      - Dr = 1/2 (right side, stores 0.5)
+                      - D = 1 (both sides: 1/2+1/2, stores 1.0)
+                      
+13. Unnamed: 12     - Numeric deduction value (0.5, 1.0, etc.)
+                      Optional - values can be in Deducts column or notes
+
+IMPORTANT NOTES:
+----------------
+- Column names must match EXACTLY (including trailing spaces)
+- Headers should be at row 9 (0-indexed: row 8)
+- Rows 0-7 typically contain project metadata
+- Notes section at bottom will be auto-removed
+
+COLOR CODES IN HEADER (OPTIONAL):
+----------------------------------
+You can specify color codes in rows 0-7 (header section). The script will automatically extract them.
+Supported formats:
+- "Bed = COLOR123" or "Bedroom = COLOR123" or "Bed/Bedroom = COLOR123"
+- "Living = COLOR456" or "Liv = COLOR456" or "Living/Liv = COLOR456"
+- "Studio = COLOR789"
+- "Den = COLOR012"
+- "Kitchen = COLOR345"
+- "Bath = COLOR678" or "Bathroom = COLOR678"
+
+Example:
+Row 1: Bed/Bedroom = BED123
+Row 2: Living/Liv = LIV456
+Row 3: Studio = STUDIO789
+Row 4: Den = DEN012
+Row 5: Kitchen = KITCHEN345
+Row 6: Bath = BATH678
+
+EXAMPLE HEADER ROW:
+--------------------
+Tag | Drawing Ref. | Q | Product | Roll | Width | Height | Chain  | Fabric | Mount | Control | Deducts  | Unnamed: 12
+
+================================================================================
+
