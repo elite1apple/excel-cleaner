@@ -55,6 +55,12 @@ def parse_fraction_string(value_str: str) -> Optional[float]:
     
     value_str = str(value_str).strip()
     
+    # Fix common data entry typos
+    value_str = re.sub(r'\.{2,}', '.', value_str)  # Double/triple dots "65..5" -> "65.5"
+    value_str = value_str.replace(',', '.')         # Comma as decimal "62,5" -> "62.5"
+    # Note: incomplete fractions like "62 1/" or "62 3/" are NOT auto-fixed because
+    # they could be any 1/8-based fraction (1/8, 1/4, 3/8, 1/2, 5/8, 3/4, 7/8).
+    
     # Replace Unicode fractions with their decimal equivalents
     for unicode_frac, decimal_val in unicode_fractions.items():
         if unicode_frac in value_str:
@@ -126,11 +132,14 @@ def extract_deduction_values_from_notes(df_raw: pd.DataFrame, header_row: int = 
     # First, try to read from specific cell if provided
     if deduction_cell:
         try:
-            import openpyxl
-            from openpyxl.utils import coordinate_from_string, column_index_from_string
+            import re as _re
+            from openpyxl.utils import column_index_from_string
             
-            # Parse cell reference (e.g., "G8" -> row=8, col=G)
-            col_letter, row_num = coordinate_from_string(deduction_cell.upper())
+            # Parse cell reference (e.g., "G8" -> col_letter="G", row_num=8)
+            _m = _re.match(r'^([A-Za-z]+)(\d+)$', deduction_cell.strip())
+            if not _m:
+                raise ValueError(f"Invalid cell reference: {deduction_cell}")
+            col_letter, row_num = _m.group(1).upper(), int(_m.group(2))
             col_idx = column_index_from_string(col_letter) - 1  # Convert to 0-based index
             row_idx = row_num - 1  # Convert to 0-based index
             
@@ -314,11 +323,82 @@ def parse_deduction_value(deduct_code: str, numeric_value: float, notes_text: st
         return 0.5  # Default per-side
 
 
-def format_control_length(chain_value: float) -> Optional[str]:
-    """Format chain value as ControlLength (e.g., 72.0 -> '72"LOOP')"""
-    if pd.isna(chain_value):
+def normalize_fabric(fabric_str: str) -> str:
+    """
+    Normalize fabric name to a canonical form.
+    Strips trailing numbers/spaces so variants like "Bed1", "Bed 2", "Bedroom",
+    "Kitchen1", "Studio 2" are all reduced to their root canonical name.
+
+    Known families (prefix → canonical):
+        BED / BEDROOM  -> "Bed"
+        LIV / LIVING   -> "Liv"
+        KITCHEN        -> "Kitchen"
+        STUDIO         -> "Studio"
+        DEN            -> "Den"
+        BATH / BATHROOM-> "Bath"
+        LAUNDRY        -> "Laundry"
+        OFFICE         -> "Office"
+        DINING         -> "Dining"
+        GUEST          -> "Guest"
+        FAMILY         -> "Family"
+
+    Everything else is returned as-is (stripped).
+    """
+    s = fabric_str.strip()
+    upper = s.upper().replace(' ', '')  # collapse spaces for prefix matching
+
+    FABRIC_FAMILIES = [
+        ('BED',     'Bed'),
+        ('LIV',     'Liv'),
+        ('KITCHEN', 'Kitchen'),
+        ('STUDIO',  'Studio'),
+        ('DEN',     'Den'),
+        ('BATH',    'Bath'),
+        ('LAUNDRY', 'Laundry'),
+        ('OFFICE',  'Office'),
+        ('DINING',  'Dining'),
+        ('GUEST',   'Guest'),
+        ('FAMILY',  'Family'),
+    ]
+
+    # Capture any trailing digits at the very end of the string
+    trailing_match = re.search(r'(\d+)$', upper)
+    trailing_num = trailing_match.group(1) if trailing_match else ""
+
+    for prefix, canonical in FABRIC_FAMILIES:
+        if upper.startswith(prefix):
+            return canonical + trailing_num
+
+    # If no known prefix matched, try preserving trailing numbers on the original string
+    # (By default it just returns the stripped original string anyway)
+    return s
+
+
+def parse_chain_value(chain_value) -> Optional[float]:
+    """
+    Parse chain value from raw file, handling both numeric and string forms.
+    Accepts: 60, 60.0, "60", "60""
+    Returns float, or None if unparseable.
+    """
+    if chain_value is None or (isinstance(chain_value, float) and pd.isna(chain_value)):
         return None
-    return f'{int(chain_value)}"LOOP'
+    # If already numeric
+    if isinstance(chain_value, (int, float)):
+        return float(chain_value)
+    # String: strip whitespace, strip trailing inch mark
+    s = str(chain_value).strip().rstrip('"').strip()
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def format_control_length(chain_value) -> Optional[str]:
+    """Format chain value as ControlLength (e.g., 72 or '72"' -> '72" LOOP')"""
+    parsed = parse_chain_value(chain_value)
+    if parsed is None:
+        return None
+    return f'{int(parsed)}" LOOP'
 
 
 def create_special_instructions(
@@ -470,6 +550,135 @@ def extract_color_codes_from_header(df_raw: pd.DataFrame, header_row: int = 8) -
     return color_codes
 
 
+def read_excel_tolerant(file_path: str, sheet_name=0, header=None) -> pd.DataFrame:
+    """
+    Read an Excel file tolerantly.
+
+    xlsx files are ZIP archives.  When openpyxl chokes on a corrupt
+    xl/styles.xml (stylesheet), we copy the archive to a temp file with that
+    entry stripped out — openpyxl then uses a blank default stylesheet and
+    reads the data fine.
+    """
+    import zipfile
+    import shutil
+    import tempfile
+
+    def _read(path):
+        return pd.read_excel(path, sheet_name=sheet_name, header=header)
+
+    # ── Fast path ────────────────────────────────────────────────────────────
+    _primary_err = None
+    try:
+        return _read(file_path)
+    except Exception as primary_err:
+        err_str = str(primary_err).lower()
+        is_stylesheet_err = any(k in err_str for k in ('stylesheet', 'invalid xml', 'workbook'))
+        if not is_stylesheet_err:
+            raise
+        _primary_err = primary_err  # save before Python deletes it at end of except block
+
+    # ── Slow path: strip the bad stylesheet from the ZIP ─────────────────────
+    print(f"WARNING: Excel stylesheet is corrupt ({_primary_err}). "
+          f"Rebuilding file without xl/styles.xml ...")
+
+    tmp = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+    tmp.close()
+    try:
+        with zipfile.ZipFile(file_path, 'r') as zin, \
+             zipfile.ZipFile(tmp.name, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                if item.filename == 'xl/styles.xml':
+                    # Replace with a minimal valid stylesheet so openpyxl is happy
+                    minimal_styles = (
+                        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                        '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+                        '<fills count="2">'
+                        '<fill><patternFill patternType="none"/></fill>'
+                        '<fill><patternFill patternType="gray125"/></fill>'
+                        '</fills>'
+                        '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+                        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+                        '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
+                        '</styleSheet>'
+                    )
+                    zout.writestr(item, minimal_styles)
+                    print("  → Replaced corrupt xl/styles.xml with minimal stylesheet")
+                else:
+                    zout.writestr(item, zin.read(item.filename))
+
+        return _read(tmp.name)
+
+    except Exception as fallback_err:
+        raise RuntimeError(
+            f"Could not read Excel file even after stripping stylesheet. "
+            f"Primary error: {_primary_err}. Fallback error: {fallback_err}"
+        ) from _primary_err
+    finally:
+        try:
+            import os
+            os.remove(tmp.name)
+        except Exception:
+            pass
+
+
+def scan_text_tags(
+    input_file: str,
+    header_row: int = 8,
+    notes_start_keywords: list = None
+) -> list:
+    """
+    Quick scan: return a list of rows whose Tag/Unit column contains
+    non-numeric text (e.g. 'th102', 'garage').  Does NOT produce output.
+
+    Returns a list of dicts with keys: tag, fabric, width, height.
+    """
+    if notes_start_keywords is None:
+        notes_start_keywords = ["Total", "all Finshed", "Punch Reverse", "Deducts"]
+
+    df = read_excel_tolerant(input_file, sheet_name=0, header=header_row)
+
+    # Apply notes filter
+    mask = pd.Series([True] * len(df))
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            for kw in notes_start_keywords:
+                mask &= ~df[col].astype(str).str.contains(kw, case=False, na=False)
+    df = df[mask].copy()
+
+    # Find tag column
+    tag_col = next(
+        (c for c in df.columns if str(c).upper() in ['TAG', 'TAG/UNIT', 'UNIT']),
+        None
+    )
+    if not tag_col:
+        return []
+
+    def _is_text_tag(x):
+        return isinstance(x, str) and not pd.isna(x) and not str(x).replace('.', '', 1).isdigit()
+
+    text_rows = df[df[tag_col].apply(_is_text_tag)]
+
+    height_col = 'Height' if 'Height' in df.columns else ('Length' if 'Length' in df.columns else None)
+
+    results = []
+    for _, row in text_rows.iterrows():
+        w = row.get('Width', None)
+        h = row.get(height_col, None) if height_col else None
+        # Auto-skip rows with NO measurements (section labels like 'nrm', 'NOTES')
+        w_empty = w is None or (isinstance(w, float) and pd.isna(w))
+        h_empty = h is None or (isinstance(h, float) and pd.isna(h))
+        if w_empty and h_empty:
+            continue
+        results.append({
+            'tag': str(row.get(tag_col, '')),
+            'fabric': str(row.get('Fabric', '')),
+            'width': w if not w_empty else '',
+            'height': h if not h_empty else '',
+        })
+    return results
+
+
 def clean_excel_file(
     input_file: str,
     output_file: Optional[str] = None,
@@ -478,7 +687,8 @@ def clean_excel_file(
     fabric_colors: Optional[Dict[str, str]] = None,
     header_row: int = 8,
     notes_start_keywords: list = None,
-    deduction_cell: Optional[str] = None
+    deduction_cell: Optional[str] = None,
+    tag_action: str = 'skip'
 ) -> pd.DataFrame:
     """
     Clean raw Excel file into standardized format.
@@ -508,9 +718,9 @@ def clean_excel_file(
     if notes_start_keywords is None:
         notes_start_keywords = ["Total", "all Finshed", "Punch Reverse", "Deducts"]
     
-    # Read the Excel file
+    # Read the Excel file (tolerant mode handles corrupt stylesheets)
     print(f"Reading file: {input_file}")
-    df_raw = pd.read_excel(input_file, sheet_name=0, header=None)
+    df_raw = read_excel_tolerant(input_file, sheet_name=0, header=None)
     
     # Extract header row
     headers = df_raw.iloc[header_row].tolist()
@@ -550,7 +760,7 @@ def clean_excel_file(
         print("DEBUG: No deduction values found in notes - will use defaults")
     
     # Read data starting from header_row + 1
-    df = pd.read_excel(input_file, sheet_name=0, header=header_row)
+    df = read_excel_tolerant(input_file, sheet_name=0, header=header_row)
     
     # Remove rows that are notes (check for keywords in Tag or other columns)
     print("Removing note rows...")
@@ -570,31 +780,69 @@ def clean_excel_file(
             tag_col = col
             break
     
-    # Separate rows with non-numeric tags (alphabets) into skipped_df
+    # Separate / handle rows with non-numeric tags based on tag_action
+    # tag_action: 'skip' (default), 'keep' (use text as-is), 'extract' (pull number out)
     skipped_df = pd.DataFrame()
     if tag_col:
-        # Identify rows where Tag is NOT numeric AND NOT NaN (i.e., contains text/alphabets)
-        # We want to keep NaNs in the main df (they get forward filled later)
-        non_numeric_mask = df[tag_col].apply(lambda x: isinstance(x, str) and not pd.isna(x) and not str(x).replace('.','',1).isdigit())
-        
-        # rows that are notes/garbage are already filtered by 'mask' above, but we only want to save
-        # "real" data rows that were skipped due to alphabets in tag.
-        # But 'df' currently still contains everything because we haven't applied 'mask' yet.
-        # Wait, we should apply 'mask' (notes filter) first to avoid filling the Skipped sheet with garbage.
-        
         # 1. Apply notes/garbage filter first
         df = df[mask].copy()
-        
-        # 2. Now identify non-numeric tags in the CLEANED set of candidate rows
-        # Re-evaluate non_numeric_mask on the filtered df
-        non_numeric_mask = df[tag_col].apply(lambda x: isinstance(x, str) and not pd.isna(x) and not str(x).replace('.','',1).isdigit())
-        
-        # Capture skipped rows
-        skipped_df = df[non_numeric_mask].copy()
-        
-        # Remove skipped rows from main df
-        df = df[~non_numeric_mask].copy()
-        print(f"DEBUG: Found {len(skipped_df)} rows with non-numeric tags (moved to Skipped sheet)")
+
+        # 2. Identify non-numeric tags in the cleaned set
+        def _is_text_tag(x):
+            return isinstance(x, str) and not pd.isna(x) and not str(x).replace('.', '', 1).isdigit()
+
+        non_numeric_mask = df[tag_col].apply(_is_text_tag)
+        text_tag_rows = df[non_numeric_mask].copy()
+
+        # Auto-skip text-tag rows that have NO width and NO height
+        # (they are section headers / labels like 'nrm', not real data rows)
+        _height_col_scan = 'Height' if 'Height' in text_tag_rows.columns else ('Length' if 'Length' in text_tag_rows.columns else None)
+        def _has_measurements(row):
+            w = row.get('Width', None)
+            h = row.get(_height_col_scan, None) if _height_col_scan else None
+            return not (pd.isna(w) if w is None or (isinstance(w, float) and __import__('math').isnan(w)) else pd.isna(w)) \
+                   or not (pd.isna(h) if h is None or (isinstance(h, float) and __import__('math').isnan(h)) else pd.isna(h))
+
+        if len(text_tag_rows) > 0 and _height_col_scan:
+            has_data_mask = text_tag_rows.apply(
+                lambda row: not (pd.isna(row.get('Width', float('nan'))) and pd.isna(row.get(_height_col_scan, float('nan')))),
+                axis=1
+            )
+            auto_skipped = text_tag_rows[~has_data_mask]
+            text_tag_rows = text_tag_rows[has_data_mask]
+            if len(auto_skipped) > 0:
+                print(f"DEBUG: Auto-skipped {len(auto_skipped)} text-tag rows with no measurements (section labels)")
+            # Update the non_numeric_mask to only cover rows with actual data
+            non_numeric_mask = df[tag_col].apply(_is_text_tag)
+            # Build a combined mask: text-tag rows that also HAVE measurements
+            rows_with_data_idx = set(text_tag_rows.index)
+            non_numeric_mask = non_numeric_mask & df.index.isin(rows_with_data_idx)
+
+        print(f"DEBUG: Found {len(text_tag_rows)} rows with non-numeric tags (action={tag_action})")
+
+        if tag_action == 'skip':
+            # Current default: exclude from main df, put in Skipped sheet
+            skipped_df = text_tag_rows
+            df = df[~non_numeric_mask].copy()
+
+        elif tag_action == 'keep':
+            # Use the text tag as-is — leave rows in df, no modification needed
+            df = df.copy()  # all rows stay
+
+        elif tag_action == 'extract':
+            # Extract the first number from the text tag; fall back to text if none found
+            def _extract_tag(x):
+                if _is_text_tag(x):
+                    m = re.search(r'\d+', str(x))
+                    return m.group(0) if m else x
+                return x
+            df[tag_col] = df[tag_col].apply(_extract_tag)
+            df = df.copy()
+
+        else:
+            # Unknown action: default to skip
+            skipped_df = text_tag_rows
+            df = df[~non_numeric_mask].copy()
     else:
         # Just apply the notes mask if no tag column
         df = df[mask].copy()
@@ -610,12 +858,13 @@ def clean_excel_file(
     
     if tag_col:
         df[tag_col] = df[tag_col].ffill()
-        # Convert to numeric where possible, keeping non-numeric as object
-        try:
-            df[tag_col] = pd.to_numeric(df[tag_col])
-        except (ValueError, TypeError):
-            # If conversion fails, keep as is (may contain text notes)
-            pass
+        # Only convert to numeric when we're not deliberately keeping text tags.
+        # pd.to_numeric() would silently destroy tags like 'th105' → NaN.
+        if tag_action not in ('keep', 'extract'):
+            try:
+                df[tag_col] = pd.to_numeric(df[tag_col])
+            except (ValueError, TypeError):
+                pass
     
     # Remove rows where essential columns are all NaN
     # Handle both 'Height' and 'Length' column names
@@ -643,6 +892,7 @@ def clean_excel_file(
     
     skipped_count = 0
     skipped_reasons = {'no_fabric': 0, 'no_width': 0, 'no_height': 0}
+    error_row_indices = []  # track which output rows need red highlighting
     
     for idx, row in df.iterrows():
         tag = row.get(tag_col, '') if tag_col else ''
@@ -654,7 +904,7 @@ def clean_excel_file(
             skipped_count += 1
             continue
         
-        fabric = str(fabric_raw).strip()
+        fabric = normalize_fabric(str(fabric_raw).strip())
         
         # Clean and parse width (handle fractions including Unicode: ¾, ¼, ⅛, etc.)
         width_raw = row.get('Width')
@@ -670,12 +920,17 @@ def clean_excel_file(
         else:
             height = None
         
-        # Skip if width or height couldn't be parsed
-        if width is None or height is None:
-            if width is None:
-                skipped_reasons['no_width'] += 1
-            if height is None:
-                skipped_reasons['no_height'] += 1
+        # If width or height couldn't be parsed, include as an empty (red-flagged) row
+        has_parse_error = False
+        if width is None and width_raw is not None and not pd.isna(width_raw):
+            skipped_reasons['no_width'] += 1
+            has_parse_error = True
+        if height is None and height_raw is not None and not pd.isna(height_raw):
+            skipped_reasons['no_height'] += 1
+            has_parse_error = True
+        
+        # A row with NO numeric data at all (both raw values missing) still gets skipped silently
+        if width is None and height is None and not has_parse_error:
             skipped_count += 1
             continue
         
@@ -722,11 +977,12 @@ def clean_excel_file(
             try:
                 tag_str = str(int(float(tag)))  # Convert to float first to handle decimals, then int
             except (ValueError, TypeError):
-                tag_str = 'UNKNOWN'
+                # If it cannot be converted to float/int, it's a text tag like 'th105'
+                tag_str = str(tag).strip()
         room = f"{tag_str}-{fabric}"
         
-        # Map Control to ControlSide
-        control_side_map = {'L': 'LEFT', 'R': 'RIGHT'}
+        # Map Control to ControlSide (accepts L/R/Left/Right, case-insensitive)
+        control_side_map = {'L': 'LEFT', 'R': 'RIGHT', 'LEFT': 'LEFT', 'RIGHT': 'RIGHT'}
         control_side = control_side_map.get(control, None)
         
         # Parse deduction - SIMPLE LOGIC
@@ -762,7 +1018,9 @@ def clean_excel_file(
                         print(f"DEBUG Row {idx}: deduction_per_side_value={deduction_per_side_value}")
         
         # ControlLength - set for all rows that have Chain value (present in raw file)
-        control_length = format_control_length(chain) if chain else None
+        # parse_chain_value handles both numeric (60) and string ("60", '60"') forms
+        parsed_chain = parse_chain_value(chain)
+        control_length = format_control_length(chain) if parsed_chain is not None else None
         
         # ReverseRoll - if Roll="Rev" then "Yes", otherwise "No" (not None)
         reverse_roll = determine_reverse_roll(roll)
@@ -783,7 +1041,7 @@ def clean_excel_file(
         if extra_fabric_deduction is None:
             extra_fabric_deduction = 0.0
         
-        cleaned_data.append({
+        row_data = {
             'Color Number': color_number,
             'Width': width,
             'Height': int(height) if height is not None else None,
@@ -793,7 +1051,10 @@ def clean_excel_file(
             'ControlLength': control_length,
             'Room': room,
             'SpecialInstructions': special_instructions
-        })
+        }
+        if has_parse_error:
+            error_row_indices.append(len(cleaned_data))  # index before append
+        cleaned_data.append(row_data)
     
     df_cleaned = pd.DataFrame(cleaned_data)
     
@@ -818,21 +1079,31 @@ def clean_excel_file(
         # Get the worksheet for formatting
         worksheet = writer.sheets['Cleaned']
         
-        # Yellow fill for highlighting
+        # Yellow fill for wide-width highlighting; red fill for parse-error rows
         yellow_fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
+        red_fill = PatternFill(start_color='FF4C4C', end_color='FF4C4C', fill_type='solid')
+        
+        # Convert error_row_indices (0-based DataFrame rows) to Excel row numbers (2-based)
+        error_excel_rows = {i + 2 for i in error_row_indices}
         
         # Find column indices
         width_col_idx = df_cleaned.columns.get_loc('Width') + 1 if 'Width' in df_cleaned.columns else None
         special_instructions_col_idx = df_cleaned.columns.get_loc('SpecialInstructions') + 1 if 'SpecialInstructions' in df_cleaned.columns else None
         
         # Apply formatting to each row
+        num_cols = len(df_cleaned.columns)
         for row_num in range(2, len(df_cleaned) + 2):  # Start from row 2 (row 1 is header)
-            # Highlight width cell if value > 144
-            if width_col_idx:
-                width_value = df_cleaned.iloc[row_num - 2]['Width']  # -2 because Excel is 1-indexed and has header
-                if pd.notna(width_value) and width_value > 144:
-                    width_col_letter = openpyxl.utils.get_column_letter(width_col_idx)
-                    worksheet[f'{width_col_letter}{row_num}'].fill = yellow_fill
+            # Red-highlight entire row for parse errors (bad width/height)
+            if row_num in error_excel_rows:
+                for col_idx in range(1, num_cols + 1):
+                    worksheet.cell(row=row_num, column=col_idx).fill = red_fill
+            else:
+                # Highlight width cell if value > 144 (only for non-error rows)
+                if width_col_idx:
+                    width_value = df_cleaned.iloc[row_num - 2]['Width']
+                    if pd.notna(width_value) and width_value > 144:
+                        width_col_letter = openpyxl.utils.get_column_letter(width_col_idx)
+                        worksheet[f'{width_col_letter}{row_num}'].fill = yellow_fill
             
             # Enable wrap text for SpecialInstructions column
             if special_instructions_col_idx:

@@ -1,183 +1,272 @@
-// DOM Elements
-const uploadArea = document.getElementById('uploadArea');
-const fileInput = document.getElementById('fileInput');
-const fileInfo = document.getElementById('fileInfo');
-const uploadBtn = document.getElementById('uploadBtn');
-const loader = document.getElementById('loader');
+// ─── DOM refs ────────────────────────────────────────────
+const uploadArea    = document.getElementById('uploadArea');
+const fileInput     = document.getElementById('fileInput');
+const fileInfo      = document.getElementById('fileInfo');
+const uploadBtn     = document.getElementById('uploadBtn');
+const loader        = document.getElementById('loader');
 
-const configToggle = document.getElementById('configToggle');
+const configToggle  = document.getElementById('configToggle');
 const configContent = document.getElementById('configContent');
 
 const uploadSection = document.getElementById('uploadSection');
 const statusSection = document.getElementById('statusSection');
-const successSection = document.getElementById('successSection');
-const errorSection = document.getElementById('errorSection');
+const reviewSection = document.getElementById('reviewSection');
+const successSection= document.getElementById('successSection');
+const errorSection  = document.getElementById('errorSection');
 
-const downloadBtn = document.getElementById('downloadBtn');
-const resetBtn = document.getElementById('resetBtn');
+const reviewTableBody  = document.getElementById('reviewTableBody');
+const keepHint         = document.getElementById('keepHint');
+const extractHint      = document.getElementById('extractHint');
+const reviewKeepBtn    = document.getElementById('reviewKeepBtn');
+const reviewExtractBtn = document.getElementById('reviewExtractBtn');
+const reviewSkipBtn    = document.getElementById('reviewSkipBtn');
+
+const downloadBtn   = document.getElementById('downloadBtn');
+const resetBtn      = document.getElementById('resetBtn');
 const errorResetBtn = document.getElementById('errorResetBtn');
+const successMsg    = document.getElementById('successMessage');
+const errorMsg      = document.getElementById('errorMessage');
 
-const successMessage = document.getElementById('successMessage');
-const errorMessage = document.getElementById('errorMessage');
+const addFabricBtn  = document.getElementById('addFabricBtn');
+const fabricRows    = document.getElementById('fabricRows');
 
-// State
+// ─── State ───────────────────────────────────────────────
 let selectedFile = null;
-let downloadId = null;
+let downloadId   = null;
+let scanId       = null;       // Set after /scan succeeds
+let formSnapshot = null;       // Saved form values for phase 2
 
-// Config Toggle
+// ─── Config toggle ────────────────────────────────────────
 configToggle.addEventListener('click', () => {
     configToggle.classList.toggle('active');
     configContent.classList.toggle('show');
 });
 
-// File Upload Handlers
+// ─── File drag-and-drop / click ───────────────────────────
 uploadArea.addEventListener('click', () => fileInput.click());
 
-uploadArea.addEventListener('dragover', (e) => {
+uploadArea.addEventListener('dragover', e => {
     e.preventDefault();
     uploadArea.classList.add('dragover');
 });
-
-uploadArea.addEventListener('dragleave', () => {
-    uploadArea.classList.remove('dragover');
-});
-
-uploadArea.addEventListener('drop', (e) => {
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
     e.preventDefault();
     uploadArea.classList.remove('dragover');
-
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-        handleFileSelect(files[0]);
-    }
+    if (e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files[0]);
 });
-
-fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-        handleFileSelect(e.target.files[0]);
-    }
+fileInput.addEventListener('change', e => {
+    if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
 });
 
 function handleFileSelect(file) {
-    // Validate file type
-    const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel'];
-    const validExtensions = ['.xlsx', '.xls'];
-    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-
-    if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
+    const validExts = ['.xlsx', '.xls'];
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!validExts.includes(ext)) {
         showError('Invalid file type. Please upload .xlsx or .xls files only.');
         return;
     }
-
-    // Validate file size (16MB)
     if (file.size > 16 * 1024 * 1024) {
-        showError('File too large. Maximum size is 16MB.');
+        showError('File too large. Maximum size is 16 MB.');
         return;
     }
-
     selectedFile = file;
-    fileInfo.textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    fileInfo.textContent = `📄 ${file.name}  (${(file.size / 1024).toFixed(1)} KB)`;
     fileInfo.classList.add('show');
     uploadBtn.disabled = false;
 }
 
-// Upload & Process
+// ─── Dynamic Fabric Rows ──────────────────────────────────
+function updateFabricPlaceholder() {
+    const empty  = fabricRows.querySelector('.fabric-empty');
+    const hasRows= fabricRows.querySelectorAll('.fabric-row').length > 0;
+    if (hasRows && empty) empty.remove();
+    if (!hasRows && !empty) {
+        const p = document.createElement('p');
+        p.className = 'fabric-empty';
+        p.textContent = 'No additional fabrics added yet.';
+        fabricRows.appendChild(p);
+    }
+}
+
+addFabricBtn.addEventListener('click', () => {
+    const row = document.createElement('div');
+    row.className = 'fabric-row';
+    row.innerHTML = `
+        <input type="text" placeholder="Fabric name (e.g. Kitchen)" class="fabric-name">
+        <input type="text" placeholder="Color code (e.g. KT4561)" class="fabric-color">
+        <button class="btn-remove-fabric" title="Remove">×</button>
+    `;
+    row.querySelector('.btn-remove-fabric').addEventListener('click', () => {
+        row.remove();
+        updateFabricPlaceholder();
+    });
+    fabricRows.appendChild(row);
+    updateFabricPlaceholder();
+    row.querySelector('.fabric-name').focus();
+});
+
+function collectFabricColors() {
+    const result = {};
+    fabricRows.querySelectorAll('.fabric-row').forEach(row => {
+        const name  = row.querySelector('.fabric-name').value.trim();
+        const color = row.querySelector('.fabric-color').value.trim();
+        if (name && color) result[name] = color;
+    });
+    return Object.keys(result).length > 0 ? result : null;
+}
+
+// ─── Collect form values ──────────────────────────────────
+function collectFormData() {
+    return {
+        bedColor:      document.getElementById('bedColor').value.trim(),
+        livColor:      document.getElementById('livColor').value.trim(),
+        deductionCell: document.getElementById('deductionCell').value.trim(),
+        fabricColors:  collectFabricColors()
+    };
+}
+
+// ─── Phase 1: Scan ────────────────────────────────────────
 uploadBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
 
-    // Prepare form data
-    const formData = new FormData();
-    formData.append('file', selectedFile);
+    formSnapshot = collectFormData();
 
-    // Add optional configuration
-    const bedColor = document.getElementById('bedColor').value.trim();
-    const livColor = document.getElementById('livColor').value.trim();
-    const deductionCell = document.getElementById('deductionCell').value.trim();
-    const fabricColors = document.getElementById('fabricColors').value.trim();
+    const fd = new FormData();
+    fd.append('file', selectedFile);
 
-    if (bedColor) formData.append('bed_color', bedColor);
-    if (livColor) formData.append('liv_color', livColor);
-    if (deductionCell) formData.append('deduction_cell', deductionCell);
-    if (fabricColors) {
-        // Validate JSON
-        try {
-            JSON.parse(fabricColors);
-            formData.append('fabric_colors', fabricColors);
-        } catch (e) {
-            showError('Invalid JSON format in Additional Fabric Colors field.');
-            return;
-        }
-    }
-
-    // Show loading state
     uploadBtn.disabled = true;
     uploadBtn.classList.add('loading');
-
-    // Show status section
     uploadSection.style.display = 'none';
     statusSection.style.display = 'block';
 
     try {
-        const response = await fetch('/upload', {
-            method: 'POST',
-            body: formData
-        });
+        const res  = await fetch('/scan', { method: 'POST', body: fd });
+        const data = await res.json();
 
-        const result = await response.json();
+        if (!res.ok) throw new Error(data.error || 'Scan failed');
 
-        if (response.ok && result.success) {
-            // Success
-            downloadId = result.download_id;
-            successMessage.textContent = `File: ${result.filename}`;
+        scanId = data.scan_id;
 
-            statusSection.style.display = 'none';
-            successSection.style.display = 'block';
+        if (!data.has_text_tags) {
+            // No problematic rows — go straight to processing
+            await processFile('skip');
         } else {
-            // Error from server
-            throw new Error(result.error || 'Unknown error occurred');
+            // Show review card
+            showReviewCard(data.rows);
         }
-    } catch (error) {
-        // Show error
+    } catch (err) {
         statusSection.style.display = 'none';
-        showError(error.message);
-    } finally {
+        showError(err.message);
         uploadBtn.classList.remove('loading');
     }
 });
 
-// Download
-downloadBtn.addEventListener('click', () => {
-    if (downloadId) {
-        window.location.href = `/download/${downloadId}`;
+// ─── Review card ─────────────────────────────────────────
+function showReviewCard(rows) {
+    statusSection.style.display = 'none';
+
+    // Populate table
+    reviewTableBody.innerHTML = '';
+    rows.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r.tag}</td><td>${r.fabric}</td><td>${r.width ?? ''}</td><td>${r.height ?? ''}</td>`;
+        reviewTableBody.appendChild(tr);
+    });
+
+    // Build hint text from first tag
+    const firstTag = rows[0]?.tag ?? '';
+    const numMatch = firstTag.match(/\d+/);
+    keepHint.textContent    = firstTag ? `e.g. ${firstTag}-Bed` : '';
+    extractHint.textContent = numMatch  ? `e.g. ${numMatch[0]}-Bed` : firstTag ? `e.g. ${firstTag}-Bed` : '';
+
+    reviewSection.style.display = 'block';
+    uploadBtn.classList.remove('loading');
+}
+
+reviewKeepBtn.addEventListener('click',    () => proceedWithAction('keep'));
+reviewExtractBtn.addEventListener('click', () => proceedWithAction('extract'));
+reviewSkipBtn.addEventListener('click',    () => proceedWithAction('skip'));
+
+async function proceedWithAction(action) {
+    reviewSection.style.display = 'none';
+    statusSection.style.display = 'block';
+    await processFile(action);
+}
+
+// ─── Phase 2: Process ─────────────────────────────────────
+async function processFile(tagAction) {
+    try {
+        const fd = new FormData();
+        fd.append('scan_id',   scanId);
+        fd.append('tag_action', tagAction);
+
+        const { bedColor, livColor, deductionCell, fabricColors } = formSnapshot;
+        if (bedColor)      fd.append('bed_color',     bedColor);
+        if (livColor)      fd.append('liv_color',     livColor);
+        if (deductionCell) fd.append('deduction_cell', deductionCell);
+        if (fabricColors)  fd.append('fabric_colors', JSON.stringify(fabricColors));
+
+        const res    = await fetch('/upload', { method: 'POST', body: fd });
+        const result = await res.json();
+
+        statusSection.style.display = 'none';
+
+        if (res.ok && result.success) {
+            downloadId = result.download_id;
+            successMsg.textContent = result.filename;
+            successSection.style.display = 'block';
+        } else {
+            throw new Error(result.error || 'Unknown error occurred');
+        }
+    } catch (err) {
+        statusSection.style.display = 'none';
+        showError(err.message);
+    } finally {
+        uploadBtn.classList.remove('loading');
     }
+}
+
+// ─── Download ─────────────────────────────────────────────
+downloadBtn.addEventListener('click', () => {
+    if (downloadId) window.location.href = `/download/${downloadId}`;
 });
 
-// Reset
+// ─── Reset ────────────────────────────────────────────────
 resetBtn.addEventListener('click', resetForm);
 errorResetBtn.addEventListener('click', resetForm);
 
 function resetForm() {
-    selectedFile = null;
-    downloadId = null;
+    selectedFile  = null;
+    downloadId    = null;
+    scanId        = null;
+    formSnapshot  = null;
 
     fileInput.value = '';
     fileInfo.textContent = '';
     fileInfo.classList.remove('show');
     uploadBtn.disabled = true;
 
-    document.getElementById('bedColor').value = '';
-    document.getElementById('livColor').value = '';
+    document.getElementById('bedColor').value      = '';
+    document.getElementById('livColor').value      = '';
     document.getElementById('deductionCell').value = 'I6';
-    document.getElementById('fabricColors').value = '';
+    fabricRows.innerHTML = '';
+    updateFabricPlaceholder();
+    reviewTableBody.innerHTML = '';
 
+    reviewSection.style.display  = 'none';
     successSection.style.display = 'none';
-    errorSection.style.display = 'none';
-    statusSection.style.display = 'none';
-    uploadSection.style.display = 'block';
+    errorSection.style.display   = 'none';
+    statusSection.style.display  = 'none';
+    uploadSection.style.display  = 'block';
 }
 
+// ─── Error helper ─────────────────────────────────────────
 function showError(message) {
-    errorMessage.textContent = message;
-    errorSection.style.display = 'block';
+    errorMsg.textContent = message;
+    errorSection.style.display  = 'block';
     uploadSection.style.display = 'none';
 }
+
+// ─── Init ─────────────────────────────────────────────────
+updateFabricPlaceholder();
