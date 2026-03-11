@@ -478,11 +478,22 @@ def create_special_instructions(
 
 
 def determine_reverse_roll(roll_value: str) -> Optional[str]:
-    """Convert Roll value to ReverseRoll (Rev -> Yes)"""
+    """Convert Roll value to ReverseRoll.
+    
+    Accepted values (case-insensitive):
+      Rev, Reverse        → "Yes"
+      Reg, Regular         → "No"
+      blank / anything else → None (caller defaults to "No")
+    """
     if pd.isna(roll_value):
         return None
-    if str(roll_value).strip().upper() == "REV":
+    val = str(roll_value).strip().upper()
+    if not val:
+        return None
+    if val.startswith("REV"):      # Rev, Reverse, Revrse, etc.
         return "Yes"
+    if val.startswith("REG"):      # Reg, Regular, Reglar, etc.
+        return "No"
     return None
 
 
@@ -981,9 +992,13 @@ def clean_excel_file(
                 tag_str = str(tag).strip()
         room = f"{tag_str}-{fabric}"
         
-        # Map Control to ControlSide (accepts L/R/Left/Right, case-insensitive)
-        control_side_map = {'L': 'LEFT', 'R': 'RIGHT', 'LEFT': 'LEFT', 'RIGHT': 'RIGHT'}
-        control_side = control_side_map.get(control, None)
+        # Map Control to ControlSide (typo-tolerant: anything starting with L→LEFT, R→RIGHT)
+        if control.startswith('L'):
+            control_side = 'LEFT'
+        elif control.startswith('R'):
+            control_side = 'RIGHT'
+        else:
+            control_side = None
         
         # Parse deduction - SIMPLE LOGIC
         # When notes contain "D=1":
