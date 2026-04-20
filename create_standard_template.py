@@ -31,7 +31,7 @@ ws['A1'] = 'NOTES:'
 ws['A1'].font = Font(bold=True, size=11, color='FF0000')
 ws['A1'].fill = notes_fill
 
-ws['A2'] = '• Deducts: Dl = Left side, Dr = Right side, D = Both sides'
+ws['A2'] = '• Deductions: Dl = Left side, Dr = Right side, D = Both sides'
 ws['A2'].font = notes_font
 ws['A2'].fill = notes_fill
 
@@ -93,7 +93,7 @@ ws['I7'].comment = openpyxl.comments.Comment(
 # Row 8: Empty separator
 
 # Row 9: Headers (0-indexed row 8)
-headers = ['Tag/Unit', 'Q', 'Product', 'Roll', 'Width', 'Height', 'Chain ', 'Fabric', 'Control', 'Deducts ']
+headers = ['Tag/Unit', 'Q', 'Product', 'Roll', 'Width', 'Height', 'Chain Length', 'Fabric', 'Control', 'Deductions']
 for col_idx, header in enumerate(headers, start=1):
     cell = ws.cell(row=9, column=col_idx)
     cell.value = header
@@ -173,13 +173,13 @@ instructions = [
     '   • Fabric: Bed, Liv, Studio, Kitchen, Den, Bath (required)',
     '   • Control: L (Left) or R (Right) (required)',
     '   • Roll: Enter "Rev" for reverse roll, leave blank otherwise',
-    '   • Chain: Chain length value (e.g., 72, 48, 60)',
-    '   • Deducts: Dl (left), Dr (right), or D (both sides)',
-    '   • Deducts can include value: "Dl=1/2", "Dr=1/2", "D=1" or just "Dl", "Dr", "D"',
+    '   • Chain Length: Chain length value (e.g., 72, 48, 60)',
+    '   • Deductions: Dl (left), Dr (right), or D (both sides)',
+    '   • Deductions can include value: "Dl=1/2", "Dr=1/2", "D=1" or just "Dl", "Dr", "D"',
     '',
     '5. IMPORTANT NOTES:',
     '   • Headers MUST be at Row 9 (0-indexed: row 8)',
-    '   • Column names must match exactly (including spaces in "Chain " and "Deducts ")',
+    '   • Column names must match exactly ("Chain Length" and "Deductions")',
     '   • Tag can be blank - blank rows belong to previous Tag number',
     '   • D value in I7 is the TOTAL for both sides (Dl and Dr are each D/2)',
     '   • Notes in Column A are always visible for quick reference',

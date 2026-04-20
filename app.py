@@ -60,7 +60,15 @@ def scan_file():
         file.save(input_path)
 
         # Run the quick scan
-        text_tag_rows = scan_text_tags(input_path)
+        scan_result = scan_text_tags(input_path)
+        
+        # Handle dict format vs legacy list format just in case
+        if isinstance(scan_result, dict):
+            text_tag_rows = scan_result.get('text_rows', [])
+            missing_headers = scan_result.get('missing_headers', [])
+        else:
+            text_tag_rows = scan_result
+            missing_headers = []
 
         # Sanitise values for JSON serialisation
         import math
@@ -78,6 +86,8 @@ def scan_file():
         ]
 
         return jsonify({
+            'has_missing_headers': len(missing_headers) > 0,
+            'missing_headers': missing_headers,
             'has_text_tags': len(rows_json) > 0,
             'rows': rows_json,
             'scan_id': scan_id

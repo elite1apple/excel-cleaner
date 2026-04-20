@@ -394,11 +394,15 @@ def parse_chain_value(chain_value) -> Optional[float]:
 
 
 def format_control_length(chain_value) -> Optional[str]:
-    """Format chain value as ControlLength (e.g., 72 or '72"' -> '72" LOOP')"""
+    """Format chain value as Chain Length to closest standard length (e.g., 70 -> '72" LOOP')"""
     parsed = parse_chain_value(chain_value)
     if parsed is None:
         return None
-    return f'{int(parsed)}" LOOP'
+        
+    standard_lengths = [18, 24, 36, 48, 60, 72, 84, 96, 108]
+    closest_length = min(standard_lengths, key=lambda x: abs(x - parsed))
+    
+    return f'{closest_length}" LOOP'
 
 
 def create_special_instructions(
@@ -637,12 +641,16 @@ def scan_text_tags(
     input_file: str,
     header_row: int = 8,
     notes_start_keywords: list = None
-) -> list:
+) -> dict:
     """
-    Quick scan: return a list of rows whose Tag/Unit column contains
-    non-numeric text (e.g. 'th102', 'garage').  Does NOT produce output.
+    Quick scan: check for missing headers and return a list of rows whose Tag/Unit column
+    contains non-numeric text (e.g. 'th102', 'garage'). Does NOT produce output.
 
-    Returns a list of dicts with keys: tag, fabric, width, height.
+    Returns a dict: 
+    {
+      "text_rows": list of dicts {tag, fabric, width, height},
+      "missing_headers": list of missing essential headers
+    }
     """
     if notes_start_keywords is None:
         notes_start_keywords = ["Total", "all Finshed", "Punch Reverse", "Deducts"]
@@ -662,8 +670,28 @@ def scan_text_tags(
         (c for c in df.columns if str(c).upper() in ['TAG', 'TAG/UNIT', 'UNIT']),
         None
     )
+    
+    # Check for missing essential headers
+    missing_headers = []
+    df_cols_upper = [str(c).strip().upper() for c in df.columns]
+    
     if not tag_col:
-        return []
+        missing_headers.append('Tag/Unit')
+    
+    if not any(c in df_cols_upper for c in ['WIDTH']):
+        missing_headers.append('Width')
+        
+    if not any(c in df_cols_upper for c in ['HEIGHT', 'LENGTH']):
+        missing_headers.append('Height')
+        
+    if not any(c in df_cols_upper for c in ['FABRIC']):
+        missing_headers.append('Fabric')
+        
+    if not any(c in df_cols_upper for c in ['CONTROL', 'CONTROLS']):
+        missing_headers.append('Control')
+
+    if not tag_col:
+        return {"text_rows": [], "missing_headers": missing_headers}
 
     def _is_text_tag(x):
         return isinstance(x, str) and not pd.isna(x) and not str(x).replace('.', '', 1).isdigit()
@@ -687,7 +715,7 @@ def scan_text_tags(
             'width': w if not w_empty else '',
             'height': h if not h_empty else '',
         })
-    return results
+    return {"text_rows": results, "missing_headers": missing_headers}
 
 
 def clean_excel_file(
@@ -895,11 +923,19 @@ def clean_excel_file(
     
     # Determine tag column name - handle multiple possible names (case-insensitive)
     tag_col = None
+    deducts_col = None
+    chain_col = None
+    control_col = None
     for col in df.columns:
-        col_upper = str(col).upper()
-        if col_upper in ['TAG', 'TAG/UNIT', 'UNIT']:
+        col_clean = str(col).strip().upper()
+        if col_clean in ['TAG', 'TAG/UNIT', 'UNIT']:
             tag_col = col
-            break
+        elif col_clean in ['DEDUCTS', 'DEDUCTIONS', 'FABRIC DEDUCTION', 'FABRIC DEDUCTIONS', 'FABRIC DEDUCTION/S']:
+            deducts_col = col
+        elif col_clean in ['CHAIN', 'CHAIN LENGTH']:
+            chain_col = col
+        elif col_clean in ['CONTROL', 'CONTROLS']:
+            control_col = col
     
     skipped_count = 0
     skipped_reasons = {'no_fabric': 0, 'no_width': 0, 'no_height': 0}
@@ -945,14 +981,14 @@ def clean_excel_file(
             skipped_count += 1
             continue
         
-        # Handle both 'Control' and 'Controls' column names
-        control = str(row.get('Control', row.get('Controls', ''))).strip().upper()
-        # Handle both 'Deducts' and 'Deducts ' (with trailing space)
-        deducts = row.get('Deducts ', '') if 'Deducts ' in row.index else row.get('Deducts', '')
+        # Handle flexible column names dynamically
+        control = str(row.get(control_col, '')).strip().upper() if control_col else ''
+        deducts = row.get(deducts_col, '') if deducts_col else ''
+        
         # Check if Unnamed: 12 column exists (some files don't have it)
         deduct_value = row.get('Unnamed: 12', None) if 'Unnamed: 12' in df.columns else None
         roll = row.get('Roll', '')
-        chain = row.get('Chain ', None)
+        chain = row.get(chain_col, None) if chain_col else None
         
         # Determine color number based on fabric type
         # Handle Bed, Liv, and other fabric types (Kitchen, Studio, Den, etc.)
@@ -1032,7 +1068,7 @@ def clean_excel_file(
                     if idx < 3:
                         print(f"DEBUG Row {idx}: deduction_per_side_value={deduction_per_side_value}")
         
-        # ControlLength - set for all rows that have Chain value (present in raw file)
+        # Chain Length - set for all rows that have Chain value (present in raw file)
         # parse_chain_value handles both numeric (60) and string ("60", '60"') forms
         parsed_chain = parse_chain_value(chain)
         control_length = format_control_length(chain) if parsed_chain is not None else None
@@ -1052,7 +1088,7 @@ def clean_excel_file(
             deduction_code
         )
         
-        # Set ExtraFabricDeduction to 0 if None/NaN (no deduction)
+        # Set Fabric Deduction/s to 0 if None/NaN (no deduction)
         if extra_fabric_deduction is None:
             extra_fabric_deduction = 0.0
         

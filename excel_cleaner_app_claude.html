@@ -1,0 +1,324 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --green:#1D9E75;--green-light:#E1F5EE;--green-mid:#5DCAA5;
+    --amber:#BA7517;--amber-light:#FAEEDA;
+    --red:#A32D2D;--red-light:#FCEBEB;
+    --mono:'DM Mono',monospace;
+    --serif:'Fraunces',serif;
+  }
+  body{font-family:var(--mono);background:transparent;color:var(--color-text-primary)}
+  .shell{max-width:640px;margin:0 auto;padding:2rem 0 3rem}
+
+  h1{font-family:var(--serif);font-size:28px;font-weight:300;font-style:italic;letter-spacing:-0.5px;line-height:1.2;margin-bottom:4px}
+  .tagline{font-size:11px;color:var(--color-text-tertiary);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:2rem}
+
+  .drop-zone{
+    border:1.5px dashed var(--color-border-secondary);
+    border-radius:var(--border-radius-lg);
+    padding:2.5rem 1.5rem;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color 0.2s, background 0.2s;
+    position:relative;
+    background:var(--color-background-secondary);
+  }
+  .drop-zone:hover,.drop-zone.drag{border-color:var(--green);background:var(--green-light)}
+  .drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .drop-icon{width:36px;height:36px;margin:0 auto 12px;display:block}
+  .drop-title{font-size:14px;font-weight:500;margin-bottom:4px}
+  .drop-sub{font-size:11px;color:var(--color-text-tertiary);letter-spacing:0.04em}
+
+  .file-pill{
+    display:flex;align-items:center;gap:8px;
+    background:var(--color-background-primary);
+    border:0.5px solid var(--color-border-tertiary);
+    border-radius:var(--border-radius-md);
+    padding:8px 12px;margin-top:1rem;
+    font-size:12px;
+  }
+  .file-pill .name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .file-pill button{border:none;background:none;cursor:pointer;color:var(--color-text-tertiary);font-size:14px;padding:0 2px;line-height:1}
+  .file-pill button:hover{color:var(--red)}
+
+  .section-label{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-text-tertiary);margin-bottom:10px;margin-top:1.5rem}
+
+  .opts-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:11px;color:var(--color-text-secondary);letter-spacing:0.04em}
+  .field input,.field select{
+    font-family:var(--mono);font-size:12px;
+    border:0.5px solid var(--color-border-tertiary);
+    border-radius:var(--border-radius-md);
+    padding:7px 10px;
+    background:var(--color-background-primary);
+    color:var(--color-text-primary);
+    width:100%;
+  }
+  .field input:focus,.field select:focus{outline:2px solid var(--green-mid);outline-offset:1px}
+
+  .tag-pills{display:flex;gap:6px;margin-top:2px}
+  .tag-pill{
+    flex:1;padding:7px 0;text-align:center;
+    font-family:var(--mono);font-size:11px;letter-spacing:0.04em;
+    border:0.5px solid var(--color-border-tertiary);
+    border-radius:var(--border-radius-md);
+    cursor:pointer;background:var(--color-background-primary);
+    color:var(--color-text-secondary);transition:all 0.15s;
+  }
+  .tag-pill.active{border-color:var(--green);background:var(--green-light);color:#085041;font-weight:500}
+
+  .run-btn{
+    width:100%;margin-top:1.5rem;
+    padding:13px;font-family:var(--mono);font-size:13px;letter-spacing:0.06em;
+    text-transform:uppercase;font-weight:500;
+    background:var(--color-text-primary);color:var(--color-background-primary);
+    border:none;border-radius:var(--border-radius-md);cursor:pointer;
+    transition:opacity 0.15s,transform 0.1s;
+  }
+  .run-btn:hover:not(:disabled){opacity:0.85}
+  .run-btn:active:not(:disabled){transform:scale(0.98)}
+  .run-btn:disabled{opacity:0.4;cursor:not-allowed}
+
+  .status-bar{
+    margin-top:1rem;border-radius:var(--border-radius-md);
+    padding:10px 14px;font-size:12px;display:none;align-items:center;gap:8px;
+  }
+  .status-bar.info{display:flex;background:var(--green-light);color:#085041;border:0.5px solid #5DCAA5}
+  .status-bar.error{display:flex;background:var(--red-light);color:var(--red);border:0.5px solid #F09595}
+  .status-bar.warn{display:flex;background:var(--amber-light);color:var(--amber);border:0.5px solid #FAC775}
+
+  .spinner{width:14px;height:14px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .download-btn{
+    display:none;width:100%;margin-top:10px;padding:11px;
+    font-family:var(--mono);font-size:12px;letter-spacing:0.06em;text-transform:uppercase;font-weight:500;
+    background:var(--green-light);color:#085041;
+    border:1px solid var(--green);border-radius:var(--border-radius-md);cursor:pointer;
+    transition:background 0.15s;
+  }
+  .download-btn.show{display:block}
+  .download-btn:hover{background:#9FE1CB}
+
+  .scan-preview{
+    margin-top:1rem;border-radius:var(--border-radius-md);
+    border:0.5px solid var(--color-border-tertiary);overflow:hidden;display:none;
+  }
+  .scan-preview.show{display:block}
+  .scan-header{padding:8px 12px;background:var(--amber-light);font-size:11px;color:var(--amber);border-bottom:0.5px solid #FAC775;letter-spacing:0.04em}
+  .scan-table{width:100%;border-collapse:collapse;font-size:11px}
+  .scan-table td{padding:6px 12px;border-bottom:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary);vertical-align:top;word-break:break-word}
+  .scan-table tr:last-child td{border-bottom:none}
+  .scan-table tr:nth-child(even) td{background:var(--color-background-secondary)}
+
+  .divider{height:0.5px;background:var(--color-border-tertiary);margin:1.5rem 0}
+</style>
+
+<div class="shell">
+  <h1>Excel Cleaner</h1>
+  <p class="tagline">Upload · Configure · Download</p>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <svg class="drop-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="8" width="22" height="26" rx="3" fill="none" stroke="var(--color-border-secondary)" stroke-width="1.5"/>
+      <path d="M26 8V4H10V8" stroke="var(--color-border-secondary)" stroke-width="1.5"/>
+      <path d="M13 22l5-5 5 5M18 17v10" stroke="var(--green-mid)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p class="drop-title">Drop your Excel file here</p>
+    <p class="drop-sub">.xlsx or .xls · max 16 MB</p>
+  </div>
+
+  <div class="file-pill" id="filePill" style="display:none">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="9" height="12" rx="1.5" fill="none" stroke="var(--green)" stroke-width="1.2"/><path d="M3 5h5M3 8h3" stroke="var(--green)" stroke-width="1" stroke-linecap="round"/></svg>
+    <span class="name" id="fileName">—</span>
+    <button id="clearFile" title="Remove file">✕</button>
+  </div>
+
+  <div class="divider"></div>
+
+  <p class="section-label">Tag rows</p>
+  <div class="tag-pills">
+    <div class="tag-pill active" data-val="skip" onclick="setTag(this)">Skip</div>
+    <div class="tag-pill" data-val="keep" onclick="setTag(this)">Keep</div>
+    <div class="tag-pill" data-val="extract" onclick="setTag(this)">Extract</div>
+  </div>
+
+  <p class="section-label" style="margin-top:1.5rem">Color &amp; cell options</p>
+  <div class="opts-grid">
+    <div class="field">
+      <label>Bed color</label>
+      <input type="text" id="bedColor" placeholder="e.g. FFD700">
+    </div>
+    <div class="field">
+      <label>Living color</label>
+      <input type="text" id="livColor" placeholder="e.g. C0C0C0">
+    </div>
+    <div class="field">
+      <label>Deduction cell</label>
+      <input type="text" id="dedCell" value="I6" placeholder="I6">
+    </div>
+    <div class="field">
+      <label>Fabric colors (JSON)</label>
+      <input type="text" id="fabricColors" placeholder='{"A":"#fff"}'>
+    </div>
+  </div>
+
+  <div class="scan-preview" id="scanPreview">
+    <div class="scan-header" id="scanHeader"></div>
+    <table class="scan-table" id="scanTable"></table>
+  </div>
+
+  <div class="status-bar" id="statusBar">
+    <span class="spinner" id="spinner" style="display:none"></span>
+    <span id="statusMsg"></span>
+  </div>
+
+  <button class="run-btn" id="runBtn" disabled onclick="handleRun()">Clean file ↗</button>
+  <button class="download-btn" id="dlBtn" onclick="handleDownload()">Download cleaned file</button>
+</div>
+
+<script>
+  let selectedFile = null;
+  let tagAction = 'skip';
+  let scanId = null;
+  let downloadId = null;
+  let downloadName = null;
+
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const filePill = document.getElementById('filePill');
+  const fileNameEl = document.getElementById('fileName');
+  const runBtn = document.getElementById('runBtn');
+  const statusBar = document.getElementById('statusBar');
+  const statusMsg = document.getElementById('statusMsg');
+  const spinner = document.getElementById('spinner');
+  const dlBtn = document.getElementById('dlBtn');
+  const scanPreview = document.getElementById('scanPreview');
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) setFile(e.target.files[0]);
+  });
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag');
+    if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+  });
+
+  document.getElementById('clearFile').addEventListener('click', clearFile);
+
+  function setFile(f) {
+    selectedFile = f;
+    fileNameEl.textContent = f.name;
+    filePill.style.display = 'flex';
+    runBtn.disabled = false;
+    dlBtn.classList.remove('show');
+    scanPreview.classList.remove('show');
+    scanId = null; downloadId = null;
+    setStatus('');
+  }
+
+  function clearFile() {
+    selectedFile = null; scanId = null; downloadId = null;
+    filePill.style.display = 'none';
+    fileInput.value = '';
+    runBtn.disabled = true;
+    dlBtn.classList.remove('show');
+    scanPreview.classList.remove('show');
+    setStatus('');
+  }
+
+  function setTag(el) {
+    document.querySelectorAll('.tag-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    tagAction = el.dataset.val;
+  }
+
+  function setStatus(msg, type='') {
+    statusBar.className = 'status-bar' + (type ? ' ' + type : '');
+    statusMsg.textContent = msg;
+    spinner.style.display = (type === 'info' && msg.includes('…')) ? 'block' : 'none';
+    if (!type) statusBar.style.display = 'none';
+  }
+
+  async function handleRun() {
+    if (!selectedFile) return;
+    runBtn.disabled = true;
+    dlBtn.classList.remove('show');
+
+    setStatus('Scanning file…', 'info');
+    const fd1 = new FormData();
+    fd1.append('file', selectedFile);
+    try {
+      const r1 = await fetch('/scan', { method: 'POST', body: fd1 });
+      const d1 = await r1.json();
+      if (d1.error) { setStatus(d1.error, 'error'); runBtn.disabled = false; return; }
+      scanId = d1.scan_id;
+
+      if (d1.has_text_tags && d1.rows.length > 0) {
+        showScan(d1.rows);
+        setStatus(`Found ${d1.rows.length} tag row(s). Proceeding with "${tagAction}" action.`, 'warn');
+      } else {
+        scanPreview.classList.remove('show');
+        setStatus('No tag rows found. Processing…', 'info');
+      }
+
+      setStatus('Cleaning file…', 'info');
+      const fd2 = new FormData();
+      fd2.append('scan_id', scanId);
+      fd2.append('tag_action', tagAction);
+      const bc = document.getElementById('bedColor').value.trim();
+      const lc = document.getElementById('livColor').value.trim();
+      const dc = document.getElementById('dedCell').value.trim() || 'I6';
+      const fc = document.getElementById('fabricColors').value.trim();
+      if (bc) fd2.append('bed_color', bc);
+      if (lc) fd2.append('liv_color', lc);
+      if (dc) fd2.append('deduction_cell', dc);
+      if (fc) fd2.append('fabric_colors', fc);
+
+      const r2 = await fetch('/upload', { method: 'POST', body: fd2 });
+      const d2 = await r2.json();
+      if (d2.error) { setStatus(d2.error, 'error'); runBtn.disabled = false; return; }
+
+      downloadId = d2.download_id;
+      downloadName = d2.filename;
+      setStatus('Done! Your file is ready.', 'info');
+      spinner.style.display = 'none';
+      dlBtn.textContent = `Download ${downloadName}`;
+      dlBtn.classList.add('show');
+      runBtn.disabled = false;
+    } catch (err) {
+      setStatus('Network error: ' + err.message, 'error');
+      runBtn.disabled = false;
+    }
+  }
+
+  function handleDownload() {
+    if (!downloadId) return;
+    window.location.href = '/download/' + encodeURIComponent(downloadId);
+  }
+
+  function showScan(rows) {
+    const tbl = document.getElementById('scanTable');
+    const hdr = document.getElementById('scanHeader');
+    tbl.innerHTML = '';
+    if (!rows.length) { scanPreview.classList.remove('show'); return; }
+    hdr.textContent = `${rows.length} tag row${rows.length>1?'s':''} detected`;
+    const keys = Object.keys(rows[0]).slice(0, 5);
+    rows.slice(0, 8).forEach(row => {
+      const tr = document.createElement('tr');
+      keys.forEach(k => {
+        const td = document.createElement('td');
+        td.textContent = row[k] !== undefined ? String(row[k]).slice(0, 40) : '';
+        tr.appendChild(td);
+      });
+      tbl.appendChild(tr);
+    });
+    scanPreview.classList.add('show');
+  }
+</script>

@@ -1,231 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel Cleaner</title>
-    <meta name="description"
-        content="Transform raw window shade measurement data into clean, automation-ready Excel files instantly.">
+    <meta name="description" content="Transform raw window shade measurement data into clean, automation-ready Excel files instantly.">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&display=swap" rel="stylesheet">
 </head>
-
 <body>
-    <!-- Animated background blobs -->
-    <div class="bg-blob blob-1"></div>
-    <div class="bg-blob blob-2"></div>
-    <div class="bg-blob blob-3"></div>
+    <div class="shell">
+        <h1>Excel Cleaner</h1>
+        <p class="tagline">Upload · Configure · Download</p>
 
-    <div class="container">
-        <header class="header">
-            <div class="logo-mark">
-                <span class="logo-icon">🪟</span>
+        <!-- Drop Zone -->
+        <div class="drop-zone" id="dropZone">
+            <input type="file" id="fileInput" accept=".xlsx,.xls">
+            <svg class="drop-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="4" width="22" height="28" rx="3" fill="none" stroke="var(--color-border)" stroke-width="1.5"/>
+                <path d="M13 20l5-5 5 5M18 15v10" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 28h20" stroke="var(--color-border)" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <p class="drop-title">Drop your Excel file here</p>
+            <p class="drop-sub">.xlsx or .xls &nbsp;·&nbsp; max 16 MB</p>
+        </div>
+
+        <!-- File pill -->
+        <div class="file-pill" id="filePill" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <rect x="1" y="1" width="9" height="12" rx="1.5" fill="none" stroke="var(--green)" stroke-width="1.2"/>
+                <path d="M3 5h5M3 8h3" stroke="var(--green)" stroke-width="1" stroke-linecap="round"/>
+            </svg>
+            <span class="name" id="fileName">—</span>
+            <button id="clearFile" title="Remove file">✕</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Tag action -->
+        <p class="section-label">Tag rows</p>
+        <div class="tag-pills">
+            <div class="tag-pill active" data-val="skip" id="pill-skip">Skip</div>
+            <div class="tag-pill" data-val="keep" id="pill-keep">Keep</div>
+            <div class="tag-pill" data-val="extract" id="pill-extract">Extract number</div>
+        </div>
+
+        <!-- Color & cell options -->
+        <p class="section-label" style="margin-top:1.5rem">Color &amp; cell options</p>
+        <div class="opts-grid">
+            <div class="field">
+                <label for="bedColor">Bed color</label>
+                <input type="text" id="bedColor" placeholder="e.g. YUNOWH">
             </div>
-            <h1 class="title">Excel Cleaner</h1>
-            <p class="subtitle">Drop in a raw measurement file — get back a clean, automation-ready sheet in seconds</p>
-        </header>
-
-        <main class="main-content">
-
-            <!-- Upload Section -->
-            <div class="card upload-section" id="uploadSection">
-
-                <div class="upload-area" id="uploadArea">
-                    <div class="upload-icon-wrap">
-                        <svg width="48" height="48" fill="none" viewBox="0 0 48 48">
-                            <path d="M24 8v24M14 18l10-10 10 10" stroke="currentColor" stroke-width="3"
-                                stroke-linecap="round" stroke-linejoin="round" />
-                            <path d="M8 36h32a2 2 0 0 1 2 2v2H6v-2a2 2 0 0 1 2-2z" fill="currentColor" opacity=".15" />
-                        </svg>
-                    </div>
-                    <h2>Drop your Excel file here</h2>
-                    <p class="upload-hint">or <span class="link-text">click to browse</span> &nbsp;·&nbsp; .xlsx / .xls
-                    </p>
-                    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
-                    <div class="file-badge" id="fileInfo"></div>
-                </div>
-
-                <!-- Advanced Options -->
-                <div class="config-section">
-                    <button class="config-toggle" id="configToggle">
-                        <span class="config-toggle-label">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <circle cx="12" cy="12" r="3" />
-                                <path
-                                    d="M19.07 4.93a10 10 0 0 0-14.14 0M4.93 19.07a10 10 0 0 0 14.14 0M19.07 19.07a10 10 0 0 0 0-14.14M4.93 4.93a10 10 0 0 0 0 14.14" />
-                            </svg>
-                            Advanced Options
-                            <span class="badge-optional">optional</span>
-                        </span>
-                        <span class="toggle-chevron" id="toggleChevron">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2.5">
-                                <polyline points="6 9 12 15 18 9" />
-                            </svg>
-                        </span>
-                    </button>
-
-                    <div class="config-content" id="configContent">
-                        <p class="config-help">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <circle cx="12" cy="12" r="10" />
-                                <line x1="12" y1="8" x2="12" y2="12" />
-                                <line x1="12" y1="16" x2="12.01" y2="16" />
-                            </svg>
-                            Color codes are auto-detected from your file headers. Only fill these in to override or add
-                            missing ones.
-                        </p>
-
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label for="bedColor">Bed Color Code</label>
-                                <input type="text" id="bedColor" placeholder="e.g., YUNOWH">
-                                <span class="help-text">Overrides auto-detected Bed color</span>
-                            </div>
-                            <div class="form-group">
-                                <label for="livColor">Liv Color Code</label>
-                                <input type="text" id="livColor" placeholder="e.g., PWS3WHIT">
-                                <span class="help-text">Overrides auto-detected Liv color</span>
-                            </div>
-                            <div class="form-group">
-                                <label for="deductionCell">Deduction Cell</label>
-                                <input type="text" id="deductionCell" placeholder="I6" value="I6">
-                                <span class="help-text">Cell reference for D value</span>
-                            </div>
-                        </div>
-
-                        <!-- Additional Fabric Colors -->
-                        <div class="fabric-section">
-                            <div class="fabric-section-header">
-                                <div>
-                                    <label class="fabric-label">Additional Fabric Colors</label>
-                                    <span class="help-text">For fabrics not auto-detected (Kitchen, Studio, Den…)</span>
-                                </div>
-                                <button class="btn-add-fabric" id="addFabricBtn" type="button">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2.5">
-                                        <line x1="12" y1="5" x2="12" y2="19" />
-                                        <line x1="5" y1="12" x2="19" y2="12" />
-                                    </svg>
-                                    Add Fabric
-                                </button>
-                            </div>
-                            <div class="fabric-rows" id="fabricRows">
-                                <!-- rows added dynamically -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <button class="btn-primary" id="uploadBtn" disabled>
-                    <span class="btn-text">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5">
-                            <polyline points="16 16 12 12 8 16" />
-                            <line x1="12" y1="12" x2="12" y2="21" />
-                            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
-                        </svg>
-                        Upload &amp; Clean
-                    </span>
-                    <span class="btn-loader" id="loader"></span>
-                </button>
+            <div class="field">
+                <label for="livColor">Living color</label>
+                <input type="text" id="livColor" placeholder="e.g. PWS3WHIT">
             </div>
-
-            <!-- Processing -->
-            <div class="card status-section" id="statusSection" style="display:none;">
-                <div class="pulse-ring"></div>
-                <div class="spinner"></div>
-                <h2>Cleaning your file…</h2>
-                <p>This only takes a moment</p>
+            <div class="field">
+                <label for="dedCell">Deduction cell</label>
+                <input type="text" id="dedCell" value="I6" placeholder="I6">
             </div>
+        </div>
 
-            <!-- Review: Text-Tag Rows Found -->
-            <div class="card review-section" id="reviewSection" style="display:none;">
-                <div class="result-icon review-icon">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                    </svg>
-                </div>
-                <h2>Non-numeric tags found</h2>
-                <p class="result-sub">These rows have text in the Tag/Unit column. How would you like to handle them?</p>
-                <div class="review-table-wrap">
-                    <table class="review-table" id="reviewTable">
-                        <thead>
-                            <tr><th>Tag</th><th>Fabric</th><th>Width</th><th>Height</th></tr>
-                        </thead>
-                        <tbody id="reviewTableBody"></tbody>
-                    </table>
-                </div>
-                <div class="review-actions">
-                    <button class="btn-review btn-keep" id="reviewKeepBtn">
-                        <span class="btn-review-label">Keep as-is</span>
-                        <span class="btn-review-hint" id="keepHint"></span>
-                    </button>
-                    <button class="btn-review btn-extract" id="reviewExtractBtn">
-                        <span class="btn-review-label">Extract number</span>
-                        <span class="btn-review-hint" id="extractHint"></span>
-                    </button>
-                    <button class="btn-review btn-skip" id="reviewSkipBtn">
-                        <span class="btn-review-label">Skip these rows</span>
-                        <span class="btn-review-hint">excluded</span>
-                    </button>
-                </div>
+        <!-- Additional fabric colors -->
+        <p class="section-label" style="margin-top:1.5rem">Additional fabric colors</p>
+        <div class="fabric-section">
+            <div id="fabricRows">
+                <!-- rows added dynamically -->
             </div>
+            <button class="add-fabric-btn" id="addFabricBtn" type="button">+ Add fabric</button>
+        </div>
 
-            <!-- Success -->
-            <div class="card success-section" id="successSection" style="display:none;">
-                <div class="result-icon success-icon">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.5">
-                        <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                </div>
-                <h2>All done!</h2>
-                <p id="successMessage" class="result-sub"></p>
-                <div class="button-group">
-                    <button class="btn-success" id="downloadBtn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        Download Cleaned File
-                    </button>
-                    <button class="btn-secondary" id="resetBtn">
-                        Clean Another File
-                    </button>
-                </div>
+        <!-- Missing headers warning -->
+        <div class="status-bar warn" id="missingBar" style="display:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span id="missingMsg"></span>
+            <div class="missing-actions">
+                <button class="inline-btn inline-btn-fix" id="headersFixBtn">Fix my file</button>
+                <button class="inline-btn inline-btn-skip" id="headersSkipBtn">Process anyway</button>
             </div>
+        </div>
 
-            <!-- Error -->
-            <div class="card error-section" id="errorSection" style="display:none;">
-                <div class="result-icon error-icon">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.5">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                </div>
-                <h2>Something went wrong</h2>
-                <p id="errorMessage" class="result-sub error-text"></p>
-                <button class="btn-secondary" id="errorResetBtn">Try Again</button>
-            </div>
+        <!-- Scan preview (text-tag rows) -->
+        <div class="scan-preview" id="scanPreview">
+            <div class="scan-header" id="scanHeader"></div>
+            <table class="scan-table" id="scanTable"></table>
+        </div>
 
-        </main>
+        <!-- General status bar -->
+        <div class="status-bar" id="statusBar" style="display:none">
+            <span class="spinner" id="spinner" style="display:none"></span>
+            <span id="statusMsg"></span>
+        </div>
 
-        <footer class="footer">
-            <p>Auto-detects color codes · Normalizes fabric names · Formats chain lengths</p>
-        </footer>
+        <!-- Run button -->
+        <button class="run-btn" id="runBtn" disabled id="uploadBtn">Clean file ↗</button>
+
+        <!-- Download button -->
+        <button class="download-btn" id="dlBtn">Download cleaned file</button>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
-
 </html>
